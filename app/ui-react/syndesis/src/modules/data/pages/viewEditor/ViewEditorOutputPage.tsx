@@ -7,9 +7,12 @@ import {
 import {
   Breadcrumb,
   ExpandablePreview,
+  IProjectedColumn,
   PageLoader,
   PageSection,
   PreviewButtonSelection,
+  RemoveColumnDialog,
+  ViewOutputTable,
   ViewOutputToolbar,
 } from '@syndesis/ui';
 import { useRouteData, WithLoader } from '@syndesis/utils';
@@ -50,15 +53,19 @@ export interface IViewEditorOutputRouteState {
 export const ViewEditorOutputPage: React.FunctionComponent = () => {
   const { pushNotification } = useContext(UIContext);
   const { t } = useTranslation(['data', 'shared']);
-  const { params, state, history } = useRouteData<IViewEditorOutputRouteParams, IViewEditorOutputRouteState>();
+  const { params, state, history } = useRouteData<
+    IViewEditorOutputRouteParams,
+    IViewEditorOutputRouteState
+>();
 
   const [activeFilter, setActiveFilter] = React.useState();
-  const [columnsToDelete] = React.useState();
-  const [enableRemoveColumn] = React.useState(false);
-  const [enableReorderColumnDown] = React.useState(false);
-  const [enableReorderColumnUp] = React.useState(false);
+  const [columnsToDelete, setColumnsToDelete] = React.useState([] as string[]);
+  const [enableRemoveColumn, setEnableRemoveColumn] = React.useState(false);
+  const [enableReorderDown, setEnableReorderDown] = React.useState(false);
+  const [enableReorderUp, setEnableReorderUp] = React.useState(false);
   const [enableSave] = React.useState(false);
   const [filterResultsMessage, setFilterResultsMessage] = React.useState();
+  const [isRemoveDialogOpen, setRemoveDialogOpen] = React.useState(false);
   const [previewExpanded, setPreviewExpanded] = React.useState(
     state.previewExpanded
   );
@@ -67,11 +74,57 @@ export const ViewEditorOutputPage: React.FunctionComponent = () => {
   const [queryResults, setQueryResults] = React.useState(state.queryResults);
   const { queryVirtualization } = useVirtualizationHelpers();
   const { resource: virtualization } = useVirtualization(params.virtualizationId);
-  const { resource: viewDefn, loading, error } = useViewDefinition(params.viewDefinitionId, state.viewDefinition);
+  const { resource: viewDefn, loading, error } = useViewDefinition(
+    params.viewDefinitionId,
+    state.viewDefinition
+  );
+  const [selectedColumnNames, setSelectedColumnNames] = React.useState(
+    [] as string[]
+  );
+
+  const columns: IProjectedColumn[] = [
+    {
+      expression: 'A short expression',
+      isPk: true,
+      name: 'Basketball',
+      position: 0,
+      properties: { magic: 'johnson', larry: 'bird' },
+      selected: false,
+      type: 'string',
+    },
+    {
+      isPk: false,
+      name: 'Baseball',
+      position: 1,
+      properties: { mike: 'trout', clayton: 'kershaw' },
+      selected: false,
+      type: 'boolean',
+    },
+    {
+      expression:
+        'This is a VERY long expression and therefore would take up a lot of space in the table. Have a nice day!',
+      isPk: false,
+      name: 'Golf',
+      position: 2,
+      properties: { rickie: 'fowler', phil: 'mickelson' },
+      selected: false,
+      type: 'string',
+    },
+  ];
+  const [projectedColumns, setProjectedColumns] = React.useState(columns);
+  const [filteredColumns, setFilteredColumns] = React.useState(columns);
+
+  const nameFilter = t('shared:Name');
+  const typeFilter = t('shared:Type');
+
+  const doRemoveColumns = () => {
+    // TODO: implement remove columns
+  };
 
   const handleActiveFilterClosed = () => {
     setActiveFilter(null);
     setFilterResultsMessage(null);
+    setFilteredColumns(projectedColumns);
   };
 
   const handleAddColumn = () => {
@@ -79,20 +132,49 @@ export const ViewEditorOutputPage: React.FunctionComponent = () => {
   };
 
   const handleApplyFilter = (filterBy: string, filter: string) => {
-    setFilterResultsMessage('blah'); // TODO: construct message
-    setActiveFilter('blah'); // TODO: construct active filter
+    const filtered =
+      nameFilter === filterBy
+        ? projectedColumns.filter(column => column.name.includes(filter))
+        : projectedColumns.filter(column => column.type.includes(filter));
+    setFilteredColumns(filtered);
+    setFilterResultsMessage(
+      t('virtualization.viewEditor.filterResultsMessage', {
+        hidden: projectedColumns.length - filtered.length,
+        matched: filtered.length,
+      })
+    );
+    setActiveFilter(
+      t('virtualization.viewEditor.activeFilterValue', { filterBy, filter })
+    );
   };
 
   const handleCancel = () => {
     // TODO: implement cancel
   };
 
+  const handleEditColumn = () => {
+    // TODO: implement edit column
+  };
+
+  const handleEditColumnProperties = () => {
+    // TODO: implement edit column properties
+  };
+
   const handlePreviewExpandedChanged = (expanded: boolean) => {
     setPreviewExpanded(expanded);
   };
 
-  const handleRemoveColumn = () => {
+  const handleRemoveColumn = (column: IProjectedColumn) => {
+    setColumnsToDelete([column.name]);
+    toggleRemoveDialogOpen();
     // TODO: implement remove column
+  };
+
+  const handleRemoveSelectedColumns = () => {
+    setColumnsToDelete(selectedColumnNames);
+    toggleRemoveDialogOpen();
+    // TODO: implement remove column
+    // notification: The column(s) have been successfully removed
   };
 
   const handleReorderDown = () => {
@@ -152,6 +234,115 @@ export const ViewEditorOutputPage: React.FunctionComponent = () => {
     }
   };
   
+  const handleSelectColumn = (
+    isSelected: boolean,
+    column?: IProjectedColumn
+  ) => {
+    if (column && column.selected !== isSelected) {
+      let hasSelections = isSelected;
+      const updated = projectedColumns;
+
+      for (const projCol of updated) {
+        if (projCol.name === column.name) {
+          projCol.selected = isSelected;
+
+          // update selected column names
+          let columnNames = selectedColumnNames;
+          if (isSelected) {
+            // add
+            columnNames.push(column.name);
+          } else {
+            // remove
+            columnNames = columnNames.filter(name => name !== column.name);
+            hasSelections = columnNames.length !== 0;
+          }
+          setSelectedColumnNames(columnNames);
+
+          break;
+        }
+      }
+
+      setProjectedColumns(updated);
+
+      // update remove column action enablement if necessary
+      if (enableRemoveColumn && !hasSelections) {
+        setEnableRemoveColumn(false);
+      } else if (!enableRemoveColumn && hasSelections) {
+        setEnableRemoveColumn(true);
+      }
+
+      // update reorder up enablement if necessary
+      if (
+        enableReorderUp &&
+        (!hasSelections ||
+          updated.some(col => col.selected && col.position === 0))
+      ) {
+        setEnableReorderUp(false);
+      } else if (
+        !enableReorderUp &&
+        hasSelections &&
+        !updated.some(col => col.selected && col.position === 0)
+      ) {
+        setEnableReorderUp(true);
+      }
+
+      // update reorder down enablement if necessary
+      if (
+        enableReorderDown &&
+        (!hasSelections ||
+          updated.some(
+            col => col.selected && col.position === updated.length - 1
+          ))
+      ) {
+        setEnableReorderDown(false);
+      } else if (
+        !enableReorderDown &&
+        hasSelections &&
+        !updated.some(
+          col => col.selected && col.position === updated.length - 1
+        )
+      ) {
+        setEnableReorderDown(true);
+      }
+    } else {
+      // select/deselect all columns
+      const updated = projectedColumns;
+      const selected: string[] = [];
+
+      updated.forEach((col: IProjectedColumn) => {
+        if (col.selected !== isSelected) {
+          col.selected = isSelected;
+
+          if (isSelected) {
+            selected.push(col.name);
+          }
+        }
+      });
+
+      setSelectedColumnNames(selected);
+      setProjectedColumns(updated);
+
+      // update remove column action enablement if necessary
+      if (enableRemoveColumn !== isSelected) {
+        setEnableRemoveColumn(isSelected);
+      }
+
+      // update reorder up enablement if necessary
+      if (enableReorderUp) {
+        setEnableReorderUp(false);
+      }
+
+      // update reorder down enablement if necessary
+      if (enableReorderDown) {
+        setEnableReorderDown(false);
+      }
+    }
+  };
+
+  const toggleRemoveDialogOpen = () => {
+    setRemoveDialogOpen(!isRemoveDialogOpen);
+  };
+
   return (
     <WithLoader
       loading={loading}
@@ -162,18 +353,14 @@ export const ViewEditorOutputPage: React.FunctionComponent = () => {
       {() => (
         <>
           <Breadcrumb>
-            <Link to={resolvers.dashboard.root()}>
-              {t('shared:Home')}
-            </Link>
+            <Link to={resolvers.dashboard.root()}>{t('shared:Home')}</Link>
             <Link to={resolvers.data.root()}>
               {t('shared:DataVirtualizations')}
             </Link>
             <Link
-              to={resolvers.data.virtualizations.views.root(
-                {
-                  virtualization,
-                }
-              )}
+              to={resolvers.data.virtualizations.views.root({
+                virtualization,
+              })}
             >
               {params.virtualizationId}
             </Link>
@@ -189,51 +376,82 @@ export const ViewEditorOutputPage: React.FunctionComponent = () => {
               queryResults={queryResults}
               onEditFinished={handleEditFinished}            />
           </PageSection>
-          <PageSection>
+          <PageSection variant={'light'} noPadding={true}>
             <ViewOutputToolbar
-              a11yFilterColumns={t('virtualization.viewEditor.applyColumnFilter')}
+              a11yFilterColumns={t(
+                'virtualization.viewEditor.applyColumnFilter'
+              )}
               a11yFilterText={t(
                 'virtualization.viewEditor.columnFilterSearchString'
               )}
               a11yReorderDown={t('virtualization.viewEditor.reorderColumnDown')}
               a11yReorderUp={t('virtualization.viewEditor.reorderColumnUp')}
               activeFilter={activeFilter}
-              columnsToDelete={columnsToDelete}
               enableAddColumn={true}
               enableRemoveColumn={enableRemoveColumn}
-              enableReorderColumnDown={enableReorderColumnDown}
-              enableReorderColumnUp={enableReorderColumnUp}
+              enableReorderColumnDown={enableReorderDown}
+              enableReorderColumnUp={enableReorderUp}
               enableSave={enableSave}
               i18nActiveFilter={t('virtualization.viewEditor.ActiveFilter')}
               i18nAddColumn={t('virtualization.viewEditor.AddColumn')}
               i18nCancel={t('shared:Cancel')}
               i18nFilterPlaceholder={t('shared:filterByNamePlaceholder')}
               i18nFilterResultsMessage={filterResultsMessage}
-              i18nFilterValues={[t('shared:Name')]}
-              i18nRemove={t('shared:Remove')}
+              i18nFilterValues={[nameFilter, typeFilter]}
               i18nRemoveColumn={t('virtualization.viewEditor.RemoveColumn')}
-              i18nRemoveColumnDialogConfirmMessage={t(
-                'virtualization.viewEditor.removeColumnDialogConfirmMessage'
-              )}
-              i18nRemoveColumnDialogHeader={t(
-                'virtualization.viewEditor.removeColumnDialogHeader'
-              )}
-              i18nRemoveColumnDialogMessage={t(
-                'virtualization.viewEditor.removeColumnDialogMessage'
-              )}
               i18nSave={t('shared:Save')}
               onActiveFilterClosed={handleActiveFilterClosed}
               onAddColumn={handleAddColumn}
               onCancel={handleCancel}
               onFilter={handleApplyFilter}
-              onRemoveColumn={handleRemoveColumn}
+              onRemoveColumn={handleRemoveSelectedColumns}
               onReorderColumnDown={handleReorderDown}
               onReorderColumnUp={handleReorderUp}
               onSave={handleSave}
             />
           </PageSection>
           <PageSection variant={'light'} noPadding={true}>
-            <ExpandablePreview
+            <RemoveColumnDialog
+              columnsToDelete={columnsToDelete}
+              i18nCancel={t('shared:Cancel')}
+              i18nConfirmMessage={t(
+                'virtualization.viewEditor.removeColumnDialogConfirmMessage'
+              )}
+              i18nHeader={t(
+                'virtualization.viewEditor.removeColumnDialogHeader'
+              )}
+              i18nMessage={t(
+                'virtualization.viewEditor.removeColumnDialogMessage'
+              )}
+              i18nRemove={t('shared:Remove')}
+              isOpen={isRemoveDialogOpen}
+              onCancel={toggleRemoveDialogOpen}
+              onClose={toggleRemoveDialogOpen}
+              onRemove={doRemoveColumns}
+            />
+            <ViewOutputTable
+              a11yPrimaryKeyIcon={t(
+                'virtualization.viewEditor.primaryKeyHeader'
+              )}
+              i18nEdit={t('shared:Edit')}
+              i18nExpressionHeader={t('virtualization.viewEditor.Expression')}
+              i18nNameHeader={t('shared:Name')}
+              i18nPositionHeader={t('virtualization.viewEditor.positionHeader')}
+              i18nPrimaryKeyHeader={t(
+                'virtualization.viewEditor.primaryKeyHeader'
+              )}
+              i18nProperties={t('virtualization.viewEditor.Properties')}
+              i18nRemoveColumn={t('virtualization.viewEditor.RemoveColumn')}
+              i18nTypeHeader={t('shared:Type')}
+              projectedColumns={filteredColumns}
+              onEdit={handleEditColumn}
+              onEditProperties={handleEditColumnProperties}
+              onRemove={handleRemoveColumn}
+              onSelect={handleSelectColumn}
+            />
+          </PageSection>
+          <PageSection variant={'light'} noPadding={true}>
+          <ExpandablePreview
               i18nEmptyResultsTitle={t(
                 'data:virtualization.preview.resultsTableEmptyStateTitle'
               )}

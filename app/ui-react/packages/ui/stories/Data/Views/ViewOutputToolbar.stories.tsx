@@ -1,8 +1,7 @@
 import { action } from '@storybook/addon-actions';
-import { boolean, object } from '@storybook/addon-knobs';
+import { boolean } from '@storybook/addon-knobs';
 import { storiesOf } from '@storybook/react';
 import * as React from 'react';
-
 import { ViewOutputToolbar } from '../../../src';
 
 const stories = storiesOf('Data/Views/ViewOutputToolbar', module);
@@ -27,21 +26,11 @@ const props = {
   i18nSave: 'Save',
 };
 
-const empty: string[] = [];
-const columns = ['firstName', 'lastName', 'address', 'jobTitle'];
-
 stories.add('render without filter results', () => (
   <ViewOutputToolbar
     {...props}
-    columnsToDelete={object(
-      'enter double quoted column names to delete separated by commas',
-      empty
-    )}
     enableAddColumn={boolean('enable add column', true)}
-    enableRemoveColumn={boolean(
-      'enable remove column (must have column names to delete to display dialog)',
-      false
-    )}
+    enableRemoveColumn={boolean('enable remove column', false)}
     enableReorderColumnDown={boolean('enable reorder column down', true)}
     enableReorderColumnUp={boolean('enable reorder column up', true)}
     enableSave={boolean('enable save', true)}
@@ -56,19 +45,12 @@ stories.add('render without filter results', () => (
   />
 ));
 
-stories.add('render delete columns with filter results', () => (
+stories.add('render with filter results', () => (
   <ViewOutputToolbar
     {...props}
     activeFilter={'Name=type'}
-    columnsToDelete={object(
-      'enter double quoted column names to delete separated by commas',
-      columns
-    )}
     enableAddColumn={boolean('enable add column', true)}
-    enableRemoveColumn={boolean(
-      'enable remove column (must have column names to delete to display dialog)',
-      true
-    )}
+    enableRemoveColumn={boolean('enable remove column', true)}
     enableReorderColumnDown={boolean('enable reorder column down', true)}
     enableReorderColumnUp={boolean('enable reorder column up', true)}
     enableSave={boolean('enable save', true)}
